@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+}
+
+html, body {
+  background: #0b0b0f;
+  color: #faf8f4;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: contain;
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+/* The deck and any full-screen surface */
+.h-screen-d {
+  height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+/* Card body prose styling — lightweight markdown */
+.prose-card {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+.prose-card p {
+  margin: 0 0 0.9em;
+}
+.prose-card p:last-child { margin-bottom: 0; }
+.prose-card strong { font-weight: 600; color: #fff; }
+.prose-card em { font-style: italic; opacity: 0.95; }
+.prose-card a {
+  color: #a5d8ff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prose-card code {
+  background: rgba(255,255,255,0.08);
+  padding: 0 0.3em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+/* Disable double-tap zoom on interactive surfaces */
+.no-zoom {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+@keyframes heartBurst {
+  0% { transform: scale(0.4); opacity: 0; }
+  30% { transform: scale(1.2); opacity: 1; }
+  70% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.05); opacity: 0; }
+}
+.heart-burst {
+  animation: heartBurst 720ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heart-burst { animation: none; opacity: 1; }
+}
