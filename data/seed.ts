@@ -1,4 +1,5 @@
 import type { Card, CardImage } from "@/lib/types";
+import { wikipediaArticleUrl } from "@/lib/wikipedia";
 import { SEED_WIKIPEDIA_TITLES } from "./seed-titles";
 import seedImages from "./seed-images.json";
 
@@ -482,8 +483,15 @@ const SEED_IMAGES = seedImages as Record<string, CardImage>;
 export const SEED_CARDS: Card[] = _RAW_SEED.map((c) => {
   const wikipediaTitle = SEED_WIKIPEDIA_TITLES[c.id];
   const imageOverride = SEED_IMAGES[c.id];
+  const wikiSource = wikipediaTitle
+    ? { label: `Wikipedia: ${wikipediaTitle}`, url: wikipediaArticleUrl(wikipediaTitle) }
+    : null;
+  const existing = c.sources ?? [];
+  const hasWiki = wikiSource && existing.some((s) => s.url === wikiSource.url);
+  const sources = wikiSource && !hasWiki ? [...existing, wikiSource] : existing;
   return {
     ...c,
+    ...(sources.length > 0 ? { sources: sources.slice(0, 5) } : null),
     ...(wikipediaTitle ? { wikipediaTitle } : null),
     ...(imageOverride ? { image: imageOverride } : null),
   } as Card;

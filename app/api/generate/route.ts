@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CardSchema, CategoryEnum, type Card, type Category } from "@/lib/types";
-import { fetchWikipediaImage } from "@/lib/wikipedia";
+import { fetchWikipediaArticle } from "@/lib/wikipedia";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,8 @@ CONSTRAINTS:
 - DENIED themes: politics, current events, war as ongoing news, religion-as-truth-claim, self-harm, tragedy verbs, slurs, depressing existential framing.
 - Be specific: numbers, mechanisms, names of things. Avoid vague "many scientists believe".
 - DO NOT invent specific historical dates, exact quotes, or attributions to specific named people unless you are highly confident.
-- All claims must be verifiable on Wikipedia.
+- All factual claims (numbers, dates, names, mechanisms) MUST be supported by the Wikipedia article you cite in wikipediaTitle. If you can't find a single Wikipedia article that backs every claim in the card, write a different card. It is better to omit a fact than to invent one.
+- Pick the wikipediaTitle BEFORE writing the body — write the card from the article, not the article to fit the card.
 - Markdown allowed in body: **bold**, *italic*, paragraphs, links. NO HTML, NO IMAGES IN MARKDOWN.
 
 OUTPUT FORMAT:
@@ -38,10 +39,15 @@ Return JSON only — no prose, no code fences. Shape:
       "takeaway": "Optional one-line mental model, or omit",
       "lengthHint": "short" | "medium" | "long",
       "origin": "generated",
-      "wikipediaTitle": "Exact title of the most relevant English Wikipedia article (e.g. 'Maillard reaction', 'Pando (tree)'). REQUIRED — pick the article whose lead image best illustrates the card. Use the article title exactly as it appears on Wikipedia, including any disambiguator in parentheses."
+      "wikipediaTitle": "Exact title of the most relevant English Wikipedia article (e.g. 'Maillard reaction', 'Pando (tree)'). REQUIRED — must be a real article that backs every factual claim in the card. Use the article title exactly as it appears on Wikipedia, including any disambiguator in parentheses. The server will verify this article exists and reject the card if it does not.",
+      "sources": [
+        { "label": "Short label, e.g. 'NASA: Why is the sky blue?'", "url": "https://..." }
+      ]
     }
   ]
 }
+
+The "sources" field is OPTIONAL — provide 0–4 additional sources beyond Wikipedia (the server will always inject the Wikipedia article as a source). Only include a source if you are confident the URL is real and directly supports a specific claim. Prefer .gov, .edu, museum, scientific society, or major-encyclopedia URLs. Do NOT invent URLs. If you are unsure, omit the field — Wikipedia alone is fine.
 
 Generate {{COUNT}} cards in category "{{CATEGORY}}". Each card MUST have a unique id not in this excluded list: {{EXCLUDED_IDS}}.`;
 
@@ -170,22 +176,33 @@ export async function POST(req: NextRequest) {
     if (r.success) validated.push(r.data);
   }
 
-  // Enrich images from Wikipedia where possible. Failures keep the gradient image
-  // the model produced. Run sequentially to be polite to Wikipedia and to keep the
-  // total within the function timeout (40 cards/run × ~500ms each = ~20s worst case;
-  // generation runs cap at 5 cards, so ~2.5s).
+  // Verify each card's wikipediaTitle resolves to a real article. If it doesn't,
+  // the model is hallucinating its own provenance and we drop the card. When it
+  // does resolve, inject the canonical Wikipedia URL as a source and (when
+  // available) replace the gradient image with the article's lead image.
   const enriched: Card[] = [];
   for (const card of validated) {
-    if (!card.wikipediaTitle) {
-      enriched.push(card);
-      continue;
-    }
+    if (!card.wikipediaTitle) continue;
+    let article;
     try {
-      const img = await fetchWikipediaImage(card.wikipediaTitle);
-      enriched.push(img ? { ...card, image: img } : card);
+      article = await fetchWikipediaArticle(card.wikipediaTitle);
     } catch {
-      enriched.push(card);
+      article = null;
     }
+    if (!article) continue;
+
+    const wikiSource = {
+      label: `Wikipedia: ${article.articleTitle}`,
+      url: article.pageUrl,
+    };
+    const existing = (card.sources ?? []).filter((s) => s.url !== article.pageUrl);
+    const sources = [wikiSource, ...existing].slice(0, 5);
+
+    enriched.push({
+      ...card,
+      sources,
+      ...(article.image ? { image: article.image } : null),
+    });
   }
 
   return NextResponse.json({ cards: enriched });

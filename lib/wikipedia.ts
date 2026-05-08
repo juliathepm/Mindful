@@ -80,6 +80,15 @@ async function fetchSummary(title: string): Promise<SummaryResponse | null> {
   return (await res.json()) as SummaryResponse;
 }
 
+/**
+ * Build a canonical Wikipedia article URL from a title without an HTTP call.
+ * Used for seed cards where we trust the curated title and don't need to verify.
+ */
+export function wikipediaArticleUrl(title: string): string {
+  const slug = title.trim().replace(/\s+/g, "_");
+  return `https://en.wikipedia.org/wiki/${encodeURI(slug)}`;
+}
+
 async function fetchImageInfo(filename: string): Promise<ImageInfoResponse | null> {
   const params = new URLSearchParams({
     action: "query",
@@ -96,14 +105,7 @@ async function fetchImageInfo(filename: string): Promise<ImageInfoResponse | nul
   return (await res.json()) as ImageInfoResponse;
 }
 
-/**
- * Resolve a Wikipedia article title to a CardImage with proper attribution.
- * Returns null if the page has no image, the lookup fails, or the license is
- * unrecognised. Caller should fall back to a gradient image.
- */
-export async function fetchWikipediaImage(title: string): Promise<CardImage | null> {
-  const summary = await fetchSummary(title);
-  if (!summary) return null;
+async function imageFromSummary(summary: SummaryResponse): Promise<CardImage | null> {
   // Some pages legitimately have no image (e.g. abstract concepts).
   const display = summary.thumbnail ?? summary.originalimage;
   const original = summary.originalimage ?? summary.thumbnail;
@@ -128,7 +130,7 @@ export async function fetchWikipediaImage(title: string): Promise<CardImage | nu
     ? cleanArtist(stripHtml(artistRaw)).slice(0, 120) || "Unknown"
     : "Unknown";
   const pageUrl = summary.content_urls?.desktop?.page;
-  const alt = summary.title ?? title;
+  const alt = summary.title ?? "";
 
   return {
     kind: "url",
@@ -139,4 +141,35 @@ export async function fetchWikipediaImage(title: string): Promise<CardImage | nu
     author,
     sourceUrl,
   };
+}
+
+export type WikipediaArticle = {
+  pageUrl: string;
+  articleTitle: string;
+  image: CardImage | null;
+};
+
+/**
+ * Verify a Wikipedia article exists and return its canonical URL, title, and
+ * (optionally) a CardImage with attribution. Returns null if the article does
+ * not exist — useful as a hallucination guard for model-generated content.
+ */
+export async function fetchWikipediaArticle(title: string): Promise<WikipediaArticle | null> {
+  const summary = await fetchSummary(title);
+  if (!summary) return null;
+  const pageUrl = summary.content_urls?.desktop?.page;
+  const articleTitle = summary.title;
+  if (!pageUrl || !articleTitle) return null;
+  const image = await imageFromSummary(summary);
+  return { pageUrl, articleTitle, image };
+}
+
+/**
+ * Resolve a Wikipedia article title to a CardImage with proper attribution.
+ * Returns null if the page has no image, the lookup fails, or the license is
+ * unrecognised. Caller should fall back to a gradient image.
+ */
+export async function fetchWikipediaImage(title: string): Promise<CardImage | null> {
+  const article = await fetchWikipediaArticle(title);
+  return article?.image ?? null;
 }
