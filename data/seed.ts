@@ -1,6 +1,8 @@
-import type { Card } from "@/lib/types";
+import type { Card, CardImage } from "@/lib/types";
+import { SEED_WIKIPEDIA_TITLES } from "./seed-titles";
+import seedImages from "./seed-images.json";
 
-export const SEED_CARDS: Card[] = [
+const _RAW_SEED: Card[] = [
   // ── SCIENCE ──────────────────────────────────────────────────
   {
     id: "why-sky-blue",
@@ -474,3 +476,15 @@ export const SEED_CARDS: Card[] = [
     origin: "seed",
   },
 ];
+
+const SEED_IMAGES = seedImages as Record<string, CardImage>;
+
+export const SEED_CARDS: Card[] = _RAW_SEED.map((c) => {
+  const wikipediaTitle = SEED_WIKIPEDIA_TITLES[c.id];
+  const imageOverride = SEED_IMAGES[c.id];
+  return {
+    ...c,
+    ...(wikipediaTitle ? { wikipediaTitle } : null),
+    ...(imageOverride ? { image: imageOverride } : null),
+  } as Card;
+});

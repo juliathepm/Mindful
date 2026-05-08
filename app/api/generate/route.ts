@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { CategoryEnum, type Category } from "@/lib/types";
+import { CardSchema, CategoryEnum, type Card, type Category } from "@/lib/types";
+import { fetchWikipediaImage } from "@/lib/wikipedia";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,8 @@ Return JSON only — no prose, no code fences. Shape:
       "body": "Markdown body, 2–4 short paragraphs unless lengthHint=short.",
       "takeaway": "Optional one-line mental model, or omit",
       "lengthHint": "short" | "medium" | "long",
-      "origin": "generated"
+      "origin": "generated",
+      "wikipediaTitle": "Exact title of the most relevant English Wikipedia article (e.g. 'Maillard reaction', 'Pando (tree)'). REQUIRED — pick the article whose lead image best illustrates the card. Use the article title exactly as it appears on Wikipedia, including any disambiguator in parentheses."
     }
   ]
 }
@@ -159,6 +161,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const cards = Array.isArray(parsed.cards) ? parsed.cards : [];
-  return NextResponse.json({ cards });
+  const rawCards = Array.isArray(parsed.cards) ? parsed.cards : [];
+
+  // Validate each card up front so we know which ones have a wikipediaTitle to look up.
+  const validated: Card[] = [];
+  for (const raw of rawCards) {
+    const r = CardSchema.safeParse(raw);
+    if (r.success) validated.push(r.data);
+  }
+
+  // Enrich images from Wikipedia where possible. Failures keep the gradient image
+  // the model produced. Run sequentially to be polite to Wikipedia and to keep the
+  // total within the function timeout (40 cards/run × ~500ms each = ~20s worst case;
+  // generation runs cap at 5 cards, so ~2.5s).
+  const enriched: Card[] = [];
+  for (const card of validated) {
+    if (!card.wikipediaTitle) {
+      enriched.push(card);
+      continue;
+    }
+    try {
+      const img = await fetchWikipediaImage(card.wikipediaTitle);
+      enriched.push(img ? { ...card, image: img } : card);
+    } catch {
+      enriched.push(card);
+    }
+  }
+
+  return NextResponse.json({ cards: enriched });
 }

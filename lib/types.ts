@@ -35,7 +35,7 @@ const CardImageUrl = z.object({
   kind: z.literal("url"),
   url: z.string().url(),
   alt: z.string().min(1),
-  license: z.enum(["CC0", "CC-BY", "PD", "unsplash"]),
+  license: z.string().min(1).max(60),
   licenseUrl: z.string().url(),
   author: z.string().min(1),
   sourceUrl: z.string().url(),
@@ -66,6 +66,7 @@ const CardBaseFields = {
   sources: z.array(Source).max(5).optional(),
   lengthHint: z.enum(["short", "medium", "long"]),
   origin: z.enum(["seed", "generated"]),
+  wikipediaTitle: z.string().min(1).max(200).optional(),
 };
 
 const BigQuestionCard = z.object({

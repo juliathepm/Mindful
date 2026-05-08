@@ -38,13 +38,19 @@ export default function HomePage() {
   const [hydrated, setHydrated] = useState(false);
   const [hearted, setHearted] = useState<Set<string>>(new Set());
   const [seen, setSeen] = useState<Set<string>>(new Set());
+  // Snapshot of seen IDs at session start. The deck filters against this
+  // frozen set, not the live `seen`, so marking a card seen during the
+  // session doesn't immediately rebuild the deck and shift the current card.
+  const [initialSeen, setInitialSeen] = useState<Set<string>>(new Set());
   const [generated, setGenerated] = useState<Card[]>([]);
   const [savedOpen, setSavedOpen] = useState(false);
   const [topupInflight, setTopupInflight] = useState(false);
 
   useEffect(() => {
+    const seenIds = deriveSeenIds();
     setHearted(deriveHeartedIds());
-    setSeen(deriveSeenIds());
+    setSeen(seenIds);
+    setInitialSeen(seenIds);
     setGenerated(readGenerated());
     setHydrated(true);
   }, []);
@@ -54,10 +60,10 @@ export default function HomePage() {
     const built = buildDeck({
       seed: SEED_CARDS,
       generated,
-      seenIds: seen,
+      seenIds: initialSeen,
     });
     return avoidBackToBackCategory(built);
-  }, [hydrated, generated, seen]);
+  }, [hydrated, generated, initialSeen]);
 
   // Top-up trigger
   useEffect(() => {
