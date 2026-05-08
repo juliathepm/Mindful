@@ -19,9 +19,9 @@ type Props = {
   onOpenSettings: () => void;
 };
 
-const DRAG_THRESHOLD_FRAC = 0.25;
-const VELOCITY_THRESHOLD = 500;
-const DIRECTION_LOCK_RATIO = 1.5;
+const DRAG_THRESHOLD_FRAC = 0.18;
+const VELOCITY_THRESHOLD = 350;
+const DIRECTION_LOCK_RATIO = 1.0;
 
 export function Deck(props: Props) {
   const {
@@ -166,7 +166,6 @@ export function Deck(props: Props) {
       <div
         ref={containerRef}
         className="flex-1 relative overflow-hidden"
-        style={{ touchAction: "pan-y" }}
       >
         {!card ? (
           <div className="absolute inset-0 flex items-center justify-center text-center px-8 text-paper/70">
@@ -199,15 +198,14 @@ export function Deck(props: Props) {
             <motion.div
               key={card.id}
               className="absolute inset-0 z-10"
-              style={{ x, rotate, opacity: cardOpacity }}
+              style={{ x, rotate, opacity: cardOpacity, touchAction: "pan-y" }}
               drag="x"
-              dragDirectionLock
-              dragElastic={0.18}
+              dragElastic={0.6}
               dragConstraints={{ left: -w, right: w }}
               onDragEnd={(_, info) => {
                 const { offset, velocity } = info;
                 const horizontalDominant =
-                  Math.abs(offset.x) > Math.abs(offset.y) * DIRECTION_LOCK_RATIO;
+                  Math.abs(offset.x) >= Math.abs(offset.y) * DIRECTION_LOCK_RATIO;
                 const past =
                   horizontalDominant &&
                   (Math.abs(offset.x) > w * DRAG_THRESHOLD_FRAC ||
