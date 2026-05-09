@@ -21,7 +21,7 @@ type Props = {
 
 const DRAG_THRESHOLD_FRAC = 0.18;
 const VELOCITY_THRESHOLD = 350;
-const DIRECTION_LOCK_RATIO = 1.0;
+const DIRECTION_DECIDE_PX = 8;
 
 export function Deck(props: Props) {
   const {
@@ -44,8 +44,13 @@ export function Deck(props: Props) {
 
   const x = useMotionValue(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const swipeSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [w, setW] = useState(0);
   const seenRef = useRef<Set<string>>(new Set());
+  // Latest-callback refs so the touch-handler effect only registers once.
+  const goForwardRef = useRef<() => void>(() => {});
+  const goBackRef = useRef<() => void>(() => {});
+  const wRef = useRef(0);
 
   useEffect(() => {
     const update = () => setW(containerRef.current?.clientWidth ?? window.innerWidth);
@@ -78,6 +83,10 @@ export function Deck(props: Props) {
   useEffect(() => {
     if (sessionEnded) onSessionEnd();
   }, [sessionEnded, onSessionEnd]);
+
+  useEffect(() => {
+    wRef.current = w;
+  }, [w]);
 
   const goForward = () => {
     const cur = cards[index];
@@ -116,6 +125,75 @@ export function Deck(props: Props) {
       },
     });
   };
+
+  goForwardRef.current = goForward;
+  goBackRef.current = goBack;
+
+  // Native touch gesture: claim horizontal swipes by preventDefault before iOS
+  // commits the touch to native vertical scrolling. Vertical-leaning gestures
+  // fall through so the inner article's overflow-y scroll keeps working.
+  useEffect(() => {
+    const el = swipeSurfaceRef.current;
+    if (!el) return;
+    let start: { x: number; y: number; t: number } | null = null;
+    let mode: "idle" | "horizontal" | "vertical" = "idle";
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) {
+        start = null;
+        mode = "idle";
+        return;
+      }
+      const t = e.touches[0];
+      start = { x: t.clientX, y: t.clientY, t: performance.now() };
+      mode = "idle";
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!start || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      if (mode === "idle") {
+        if (Math.hypot(dx, dy) < DIRECTION_DECIDE_PX) return;
+        mode = Math.abs(dx) >= Math.abs(dy) ? "horizontal" : "vertical";
+      }
+      if (mode === "horizontal") {
+        e.preventDefault();
+        x.set(dx);
+      }
+    };
+
+    const onEnd = (e: TouchEvent) => {
+      const s = start;
+      const m = mode;
+      start = null;
+      mode = "idle";
+      if (!s || m !== "horizontal") return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - s.x;
+      const dt = performance.now() - s.t;
+      const vx = (dx / Math.max(dt, 1)) * 1000;
+      const ww = wRef.current || window.innerWidth;
+      const past =
+        Math.abs(dx) > ww * DRAG_THRESHOLD_FRAC ||
+        Math.abs(vx) > VELOCITY_THRESHOLD;
+      if (past && dx > 0) goForwardRef.current();
+      else if (past && dx < 0) goBackRef.current();
+      else animate(x, 0, { type: "spring", stiffness: 360, damping: 36 });
+    };
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [x]);
 
   const card = cards[index];
   const nextCard = cards[index + 1];
@@ -194,38 +272,22 @@ export function Deck(props: Props) {
               </motion.div>
             ) : null}
 
-            {/* Active card */}
-            <motion.div
-              key={card.id}
-              className="absolute inset-0 z-10"
-              style={{ x, rotate, opacity: cardOpacity, touchAction: "pan-y" }}
-              drag="x"
-              dragElastic={0.6}
-              dragConstraints={{ left: -w, right: w }}
-              onDragEnd={(_, info) => {
-                const { offset, velocity } = info;
-                const horizontalDominant =
-                  Math.abs(offset.x) >= Math.abs(offset.y) * DIRECTION_LOCK_RATIO;
-                const past =
-                  horizontalDominant &&
-                  (Math.abs(offset.x) > w * DRAG_THRESHOLD_FRAC ||
-                    Math.abs(velocity.x) > VELOCITY_THRESHOLD);
-                if (past && offset.x > 0) {
-                  goForward();
-                } else if (past && offset.x < 0) {
-                  goBack();
-                } else {
-                  animate(x, 0, { type: "spring", stiffness: 360, damping: 36 });
-                }
-              }}
-            >
-              <DoubleTapHeart
-                hearted={heartedIds.has(card.id)}
-                onToggle={() => onToggleHeart(card)}
+            {/* Active card. The swipe-surface wrapper has a stable ref so our
+                native touch handler stays attached across card transitions. */}
+            <div ref={swipeSurfaceRef} className="absolute inset-0 z-10">
+              <motion.div
+                key={card.id}
+                className="absolute inset-0"
+                style={{ x, rotate, opacity: cardOpacity }}
               >
-                <Card card={card} />
-              </DoubleTapHeart>
-            </motion.div>
+                <DoubleTapHeart
+                  hearted={heartedIds.has(card.id)}
+                  onToggle={() => onToggleHeart(card)}
+                >
+                  <Card card={card} />
+                </DoubleTapHeart>
+              </motion.div>
+            </div>
 
             <button
               type="button"
