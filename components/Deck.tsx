@@ -91,7 +91,7 @@ export function Deck(props: Props) {
   const goForward = () => {
     const cur = cards[index];
     if (!cur) return;
-    animate(x, w * 1.2, {
+    animate(x, -w * 1.2, {
       duration: 0.28,
       ease: [0.32, 0.72, 0.34, 1],
       onComplete: () => {
@@ -116,7 +116,7 @@ export function Deck(props: Props) {
       animate(x, 0, { type: "spring", stiffness: 360, damping: 36 });
       return;
     }
-    animate(x, -w * 1.2, {
+    animate(x, w * 1.2, {
       duration: 0.28,
       ease: [0.32, 0.72, 0.34, 1],
       onComplete: () => {
@@ -178,8 +178,8 @@ export function Deck(props: Props) {
       const past =
         Math.abs(dx) > ww * DRAG_THRESHOLD_FRAC ||
         Math.abs(vx) > VELOCITY_THRESHOLD;
-      if (past && dx > 0) goForwardRef.current();
-      else if (past && dx < 0) goBackRef.current();
+      if (past && dx < 0) goForwardRef.current();
+      else if (past && dx > 0) goBackRef.current();
       else animate(x, 0, { type: "spring", stiffness: 360, damping: 36 });
     };
 
@@ -201,9 +201,9 @@ export function Deck(props: Props) {
 
   const rotate = useTransform(x, [-w, 0, w], [-6, 0, 6]);
   const cardOpacity = useTransform(x, [-w, 0, w], [0.3, 1, 0.3]);
-  // Peek opacities: next-card peeks when dragging right (forward); prev when left (back).
-  const nextPeekOpacity = useTransform(x, [0, w * 0.4], [0, 0.5]);
-  const prevPeekOpacity = useTransform(x, [-w * 0.4, 0], [0.5, 0]);
+  // Peek opacities: next-card peeks when dragging left (forward); prev when right (back).
+  const nextPeekOpacity = useTransform(x, [-w * 0.4, 0], [0.5, 0]);
+  const prevPeekOpacity = useTransform(x, [0, w * 0.4], [0, 0.5]);
 
   if (sessionEnded) {
     return (
